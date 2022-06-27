@@ -1,0 +1,26 @@
+---
+- hosts: localhost
+  gather_facts: no
+  module_defaults:
+    group/aws:
+      aws_access_key: AKIAQFGY2G7DYEL2TZHE
+      aws_secret_key: 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
+      region: us-east-1
+  tasks:
+    - name: Create Launch Template
+      community.aws.ec2_launch_template:
+        name: mod5-launch-template
+        instance_type: t3.nano
+        key_name: dzr0056
+        image_id: ami-0cff7528ff583bf9a
+        iam_instance_profile:  arn:aws:iam::011192121287:instance-profile/ig-s3-secrets-role
+        network_interfaces:
+          - device_index: 0
+            associate_public_ip_address: true
+            groups:
+            - "{{ development_sg.group_id }}"
+            - "{{ postgres_tag_sg.group_id }}"
+            - "{{ secrets_endpoint_tag_sg.group_id }}"
+        # user_data: "{{ lookup('file', 'bootstrap.sh' | b64encode) }}"
+        state: present
+      register: mod5_launch_template

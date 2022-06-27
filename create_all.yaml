@@ -1,0 +1,7 @@
+- import_playbook: create_vpc.yaml
+- import_playbook: create_security.yaml
+# create rds
+# config rds
+- import_playbook: create_launch_template.yaml
+- import_playbook: create_load_balancer.yaml
+- import_playbook: create_auto_scaler.yaml

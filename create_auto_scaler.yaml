@@ -1,0 +1,27 @@
+---
+- hosts: localhost
+  gather_facts: no
+  module_defaults:
+    group/aws:
+      aws_access_key: AKIAQFGY2G7DYEL2TZHE
+      aws_secret_key: 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
+      region: us-east-1
+  tasks:
+    - name: Create Autoscaler
+      community.aws.ec2_asg:
+        name: mod5-create-auto-scaler
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+        launch_template:
+          launch_template_name: 'mod5-launch-template'
+          version: '1'
+        min_size: 2
+        max_size: 4
+        health_check_type: EC2
+        desired_capacity: 2
+        vpc_zone_identifier:
+          - "{{ public_subnet_1.subnet.id }}"
+        target_group_arns:
+          - "{{ load_balancer_target_group.target_group_arn }}"
+        state: present

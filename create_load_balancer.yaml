@@ -1,0 +1,45 @@
+---
+- hosts: localhost
+  gather_facts: no
+  module_defaults:
+    group/aws:
+      aws_access_key: AKIAQFGY2G7DYEL2TZHE
+      aws_secret_key: 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
+      region: us-east-1
+  tasks:
+    #- name: Create an elastic IP address
+    #  community.aws.ec2_eip:
+    #    state: present
+    #  register: elb_eip
+    #- name: Debug EIP
+    #  debug: var=elb_eip
+    - name: Create Target Group for Network Load Balancer
+      elb_target_group:
+        name: m5-load-balancer-target-group
+        protocol: TCP
+        port: 80
+        vpc_id: "{{ vpc.vpc.id }}"
+        stickiness_type: source_ip
+        stickiness_enabled: false
+        state: present
+      register: load_balancer_target_group
+    - name: Create a Network Load Balancer
+      community.aws.elb_network_lb:
+        name: mod5-network-load-balancer
+        subnets:
+          - "{{ public_subnet_1.subnet.id }}"
+        listeners:
+          - Protocol: TCP
+            Port: 80
+            DefaultActions:
+              - Type: forward
+                TargetGroupName: "{{ load_balancer_target_group.target_group_name }}"
+          - Protocol: TLS
+            Port: 443
+            DefaultActions:
+              - Type: forward
+                TargetGroupName: "{{ load_balancer_target_group.target_group_name }}"
+            Certificates:
+              - CertificateArn: arn:aws:acm:us-east-1:011192121287:certificate/19f92adb-f65f-4374-99dd-83010c494941
+        state: present
+      register: network_load_balancer

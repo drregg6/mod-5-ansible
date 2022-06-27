@@ -1,0 +1,166 @@
+---
+- hosts: localhost
+  gather_facts: no
+  module_defaults:
+    group/aws:
+      aws_access_key: AKIAQFGY2G7DYEL2TZHE
+      aws_secret_key: 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
+      region: us-east-1
+  vars:
+    vpc: "{{ vpc }}"
+  tasks:
+    - name: Create Network Public ACL
+      community.aws.ec2_vpc_nacl:
+        vpc_id: "{{ vpc.vpc.id }}"
+        name: mod-5-public-network-acl
+        subnets:
+          - "{{ public_subnet_1.subnet.id }}"
+          - "{{ public_subnet_2.subnet.id }}"
+        ingress:
+          - [120, 'tcp', 'allow', '0.0.0.0/0', null, null, 22, 22]
+          - [130, 'tcp', 'allow', '73.141.171.7/32', null, null, 5000, 5000]
+          - [131, 'tcp', 'allow', '24.239.105.213/32', null, null, 5000, 5000]
+          - [132, 'tcp', 'allow', '68.119.93.72/32', null, null, 5000, 5000]
+          - [140, 'tcp', 'allow', '0.0.0.0/0', null, null, 80, 80]
+          - [150, 'tcp', 'allow', '0.0.0.0/0', null, null, 443, 443]
+          - [160, 'tcp', 'allow', '0.0.0.0/0', null, null, 5432, 5432]
+          - [900, 'tcp', 'allow', '0.0.0.0/0', null, null, 1024, 65535]
+        egress:
+          - [100, 'tcp', 'allow', '0.0.0.0/0', null, null, 80, 80]
+          - [110, 'tcp', 'allow', '0.0.0.0/0', null, null, 443, 443]
+          - [200, 'tcp', 'allow', '0.0.0.0/0', null, null, 1024, 65535]
+          - [300, 'tcp', 'allow', '10.0.3.0/24', null, null, 22, 22]
+          - [310, 'tcp', 'allow', '10.0.4.0/24', null, null, 22, 22]
+        state: present
+    - name: Create Network Private ACL
+      community.aws.ec2_vpc_nacl:
+        vpc_id: "{{ vpc.vpc.id }}"
+        name: mod-5-private-network-acl
+        subnets:
+          - "{{ private_subnet_1.subnet.id }}"
+          - "{{ private_subnet_2.subnet.id }}"
+        ingress:
+          - [100, 'tcp', 'allow', '10.0.0.0/16', null, null, 5432, 5432]
+          - [120, 'tcp', 'allow', '10.0.0.0/16', null, null, 22, 22]
+          - [200, 'tcp', 'allow', '10.0.3.0/16', null, null, 443, 443]
+          - [210, 'tcp', 'allow', '10.0.4.0/16', null, null, 443, 443]
+        egress:
+          - [100, 'tcp', 'allow', '0.0.0.0/0', null, null, 1024, 65535]
+        state: present
+# Tagged Security Groups
+    - name: Create postgres-sg security
+      ec2_group:
+        name: mod5-postgres-sg
+        description: Postgres sg
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 5432
+            rule_desc: Allow traffic to mod5-postgres-tag
+        state: present
+      register: postgres_sg
+    - name: Debug postgres_sg
+      debug: var=postgres_sg
+    - name: Create postgres-tag-sg security
+      ec2_group:
+        name: mod5-postgres-tag-sg
+        description: Postgres tag sg
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules_egress:
+          - proto: tcp
+            ports:
+              - 5432
+            group_name: "{{ postgres_sg.group_name }}"
+            rule_desc: Allow traffic from mod5-postgres-sg
+        state: present
+      register: postgres_tag_sg
+    - name: Update postgres-sg security
+      ec2_group:
+        name: mod5-postgres-sg
+        description: Postgres sg
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 5432
+            group_name: "{{ postgres_tag_sg.group_name }}"
+            rule_desc: Allow traffic to mod5-postgres-tag
+        state: present
+    - name: Create mod5-secrets-endpoint-sg security
+      ec2_group:
+        name: mod5-secrets-endpoint-sg
+        description: Secrets endpoint sg
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 443
+            rule_desc: Allow traffic to mod5-secrets-endpoint-sg
+        state: present
+      register: secrets_endpoint_sg
+    - name: Create secrets-endpoint-tag-sg security
+      ec2_group:
+        name: mod5-secrets-endpoint-tag-sg
+        description: Secrets endpoint tag sg
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules_egress:
+          - proto: tcp
+            ports:
+              - 443
+            group_name: "{{ secrets_endpoint_sg.group_name }}"
+            rule_desc: Allow traffic from mod5-secrets-endpoint-sg
+        state: present
+      register: secrets_endpoint_tag_sg
+    - name: Update secrets-endpoint-sg security
+      ec2_group:
+        name: mod5-secrets-endpoint-sg
+        description: Secrets endpoint sg
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 443
+            group_name: "{{ secrets_endpoint_tag_sg.group_name }}"
+            rule_desc: Allow traffic to mod5-secrets-endpoint-tag
+        state: present
+    - name: Create mod5-development
+      ec2_group:
+        name: mod5-development-sg
+        description: Rules for development instances
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+            cidr: 0.0.0.0/0
+            rule_desc: Allow traffic from SSH
+        rules_egress:
+          - proto: tcp
+            ports:
+              - 0-65535
+            cidr_ip: 0.0.0.0/0
+            rule_desc: Allow all outbound traffic
+        state: present
+      register: development_sg
+    - name: Create mod5-nginx-server
+      ec2_group:
+        name: mod5-nginx-server-sg
+        description: Rules for nginx development
+        vpc_id: "{{ vpc.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+              - 80
+              - 443
+            cidr_ip: 0.0.0.0/0
+            rule_desc: Allow inbound traffic SSH and HTTP/S
+        rules_egress:
+          - proto: tcp
+            ports:
+              - 0-65535
+            cidr_ip: 0.0.0.0/0
+            rule_desc: Allow traffic outbound on all ports
+        state: present
+      register: nginx_server_sg
