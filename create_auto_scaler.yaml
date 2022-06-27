@@ -3,8 +3,6 @@
   gather_facts: no
   module_defaults:
     group/aws:
-      aws_access_key: AKIAQFGY2G7DYEL2TZHE
-      aws_secret_key: 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
       region: us-east-1
   tasks:
     - name: Create Autoscaler
